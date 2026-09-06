@@ -611,6 +611,9 @@ def search_courses_programs(college_id, query="course"):
             scraped = scraped_data["results"]
             course_names = scraped_data.get("course_names", [])
         config = SUPPORTED_COLLEGES.get(source["short_name"]) if source else None
+        configured_programs = list((config or {}).get("course_programs", ()))
+        if configured_programs:
+            course_names = configured_programs
         sources = []
         if source and source["website_url"]:
             sources.append({"title": f"{source['short_name']} official website", "url": source["website_url"]})

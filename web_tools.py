@@ -13,12 +13,27 @@ SUPPORTED_COLLEGES = {
         "website": "https://ceg.annauniv.edu/",
         "fallback": "https://www.annauniv.edu/",
         "course_url": "https://www.annauniv.edu/pdf/CEG_UG_Fee_Structure.pdf",
+        "course_programs": (
+            "Information Technology (IT)",
+            "Computer Science and Engineering (CSE)",
+            "Electronics and Communication Engineering (ECE)",
+        ),
     },
     "MIT": {
         "name": "Madras Institute of Technology",
         "website": "https://mitindia.edu/",
         "fallback": "https://www.annauniv.edu/",
         "course_url": "https://www.annauniv.edu/pdf/MIT_UG_Fee_Structure.pdf",
+        "course_programs": (
+            "Aeronautical Engineering",
+            "Automobile Engineering",
+            "Computer Technology",
+            "Electronics Engineering",
+            "Instrumentation Engineering",
+            "Production Technology",
+            "Rubber and Plastics Technology",
+            "Information Technology",
+        ),
     },
     "ACT": {
         "name": "Alagappa College of Technology",
