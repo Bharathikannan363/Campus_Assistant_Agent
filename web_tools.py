@@ -1,6 +1,7 @@
 """Cached official-site scraping helpers used by the public campus tools."""
 
 from functools import lru_cache
+import re
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -18,6 +19,13 @@ SUPPORTED_COLLEGES = {
             "Computer Science and Engineering (CSE)",
             "Electronics and Communication Engineering (ECE)",
         ),
+        "course_levels": {
+            "UG Programs": (
+                "Information Technology (IT)",
+                "Computer Science and Engineering (CSE)",
+                "Electronics and Communication Engineering (ECE)",
+            ),
+        },
     },
     "MIT": {
         "name": "Madras Institute of Technology",
@@ -34,24 +42,80 @@ SUPPORTED_COLLEGES = {
             "Rubber and Plastics Technology",
             "Information Technology",
         ),
+        "course_levels": {
+            "UG Programs": (
+                "Aeronautical Engineering",
+                "Automobile Engineering",
+                "Computer Technology",
+                "Electronics Engineering",
+                "Instrumentation Engineering",
+                "Production Technology",
+                "Rubber and Plastics Technology",
+                "Information Technology",
+            ),
+        },
     },
     "ACT": {
         "name": "Alagappa College of Technology",
-        "website": "https://act.annauniv.edu/",
+        "website": "https://www.annauniv.edu/act/",
         "fallback": "https://www.annauniv.edu/",
-        "course_url": "https://www.annauniv.edu/pdf/ACT_UG_Fee_Structure.pdf",
+        "course_url": "https://www.annauniv.edu/act/courses/index.html",
+        "course_levels": {
+            "UG Programs": (
+                "B.Tech - Petroleum Engineering and Technology (SS)",
+                "B.Tech - Food Technology (SS)",
+                "B.Tech - Industrial Biotechnology (R)",
+                "B.Tech - Industrial Biotechnology (SS)",
+                "B.Tech - Pharmaceutical Technology (SS)",
+                "B.Tech - Chemical Engineering (R)",
+                "B.Tech - Chemical Engineering (SS)",
+                "B.Tech - Ceramic Technology (SS)",
+                "B.Tech - Leather Technology (R)",
+                "B.Tech - Textile Technology (R)",
+                "B.Tech - Apparel Technology (SS)",
+            ),
+            "PG Programs": (
+                "M.Tech - Industrial Safety and Hazards Management (SS)",
+                "M.Tech - Biotechnology (R)",
+                "M.Tech - Computational Biology (SS)",
+                "M.Tech - Food Technology (SS)",
+                "M.Tech - Nano Science and Technology (SS)",
+                "M.Tech - Chemical Engineering (R)",
+                "M.Tech - Environmental Science and Technology (SS)",
+                "M.Tech - Petroleum Refining and Petrochemicals (R)",
+                "M.Tech - Chemical Engineering with Specialization in Pipeline Engineering (SS)",
+                "M.Tech - Ceramic Technology (R)",
+                "M.Tech - Leather and Footwear Technology (R)",
+                "M.Tech - Textile Technology (R)",
+            ),
+        },
     },
     "SAP": {
         "name": "School of Architecture and Planning",
-        "website": "https://sap.annauniv.edu/",
+        "website": "https://www.annauniv.edu/sap/",
         "fallback": "https://www.annauniv.edu/",
-        "course_url": "https://www.annauniv.edu/pdf/SAP_UG_PG_Fee_Structure.pdf",
+        "course_url": "https://www.annauniv.edu/sap/academics.html",
+        "course_levels": {
+            "UG Programs": (
+                "B.Arch",
+                "B.Plan",
+            ),
+            "PG Programs": (
+                "M.Arch - General",
+                "M.Arch - Landscape",
+                "M.Plan",
+            ),
+        },
     },
 }
 
 QUERY_KEYWORDS = {
     "departments": ("department", "departments", "faculty", "school", "branch"),
-    "courses": ("course", "courses", "programme", "programmes", "program", "degree", "prospectus", "ug", "pg", "b.e", "b.tech", "m.e", "m.tech", "m.sc", "ph.d"),
+    "courses": ("course", "courses", "corse", "corses", "coruse", "coruses",
+                "programme", "programmes", "program", "programs",
+                "offering", "offerings", "offered",
+                "degree", "syllabus", "curriculum", "prospectus",
+                "ug", "pg", "b.e", "b.tech", "m.e", "m.tech", "m.sc", "ph.d"),
     "admissions": ("admission", "admissions", "apply", "eligibility", "application", "fees", "counselling"),
     "facilities": ("facility", "facilities", "library", "hostel", "canteen", "laboratory", "lab", "sports", "auditorium", "gym"),
     "locations": ("location", "located", "campus", "building", "landmark", "map"),
@@ -104,22 +168,35 @@ def scrape_page(url):
                 "text": " ".join(anchor.get_text(" ", strip=True).split()),
                 "url": href,
             })
+    table_rows = []
+    for row in soup.find_all("tr"):
+        cells = [" ".join(cell.get_text(" ", strip=True).split()) for cell in row.find_all(["th", "td"])]
+        value = " | ".join(cell for cell in cells if cell)
+        if value:
+            table_rows.append(value)
     return {
         "url": url,
         "title": soup.title.get_text(" ", strip=True) if soup.title else "",
         "headings": [" ".join(node.get_text(" ", strip=True).split()) for node in soup.find_all(["h1", "h2", "h3", "h4"])],
         "paragraphs": [" ".join(node.get_text(" ", strip=True).split()) for node in soup.find_all("p")],
         "list_items": [" ".join(node.get_text(" ", strip=True).split()) for node in soup.find_all("li")],
+        "table_rows": table_rows,
         "links": links,
     }
 
 
 def _page_text(page):
-    return " ".join([page["title"], *page["headings"], *page["paragraphs"], *page["list_items"]])
+    return " ".join([
+        page["title"], *page["headings"], *page["paragraphs"],
+        *page["list_items"], *page.get("table_rows", []),
+    ])
 
 
 def _relevant_content(page, terms, complete=False):
-    candidates = page["headings"] + page["paragraphs"] + page["list_items"]
+    candidates = (
+        page["headings"] + page["paragraphs"] + page["list_items"]
+        + page.get("table_rows", [])
+    )
     matches = []
     for item in candidates:
         clean = " ".join(item.split())
@@ -152,26 +229,52 @@ def _course_names(pages, college):
         "SAP": ("college of engineering guindy", "madras institute", "alaggapa", "alagappa", "ceg campus", "mit campus", "act campus"),
     }.get(college, ())
     for page in pages:
-        for item in page["headings"] + page["list_items"]:
-            clean = " ".join(item.split())
-            lowered = clean.lower()
-            if not clean or len(clean) > 120 or len(clean) < 5:
-                continue
-            if any(term in lowered for term in IRRELEVANT_CONTENT_TERMS + COURSE_NOISE_TERMS):
-                continue
-            if any(term in lowered for term in other_colleges):
-                continue
-            if any(term in lowered for term in ("board of", "computer society", "institute of", "institute for", "campus", "established in", "outlook", "petronas")):
-                continue
-            if not any(term in lowered for term in (
-                "engineering", "technology", "science", "architecture",
-                "planning", "design", "management", "computer", "chemical",
-                "textile", "leather", "automobile", "aeronautical",
-            )):
-                continue
-            if clean not in names:
-                names.append(clean)
-    return names
+        for item in (
+            page["headings"] + page["paragraphs"] + page["list_items"]
+            + page.get("table_rows", [])
+        ):
+            for segment in item.split("|"):
+                clean = " ".join(segment.split())
+                lowered = clean.lower()
+                if not clean or len(clean) > 120 or len(clean) < 5:
+                    continue
+                degree_match = re.search(
+                    r"\b(?:B\.?E\.?|B\.?Tech\.?|M\.?E\.?|M\.?Tech\.?|"
+                    r"B\.?Arch\.?|M\.?Arch\.?|B\.?Plan\.?|M\.?Plan\.?|"
+                    r"M\.?Des\.?|Ph\.?D\.?)\s*(?:[-:]\s*)?.*",
+                    clean,
+                    flags=re.IGNORECASE,
+                )
+                if degree_match:
+                    value = " ".join(degree_match.group(0).split()).strip(" -:")
+                    if value and value not in names:
+                        names.append(value)
+                    continue
+                if any(term in lowered for term in IRRELEVANT_CONTENT_TERMS + COURSE_NOISE_TERMS):
+                    continue
+                if any(term in lowered for term in other_colleges):
+                    continue
+                if any(term in lowered for term in ("board of", "computer society", "institute of", "institute for", "campus", "established in", "outlook", "petronas")):
+                    continue
+                if not any(term in lowered for term in (
+                    "engineering", "technology", "science", "architecture",
+                    "planning", "design", "management", "computer", "chemical",
+                    "textile", "leather", "automobile", "aeronautical",
+                )):
+                    continue
+                if clean not in names:
+                    names.append(clean)
+    degree_names = [
+        name for name in names
+        if re.match(
+            r"^(?:B\.?E\.?|B\.?Tech\.?|M\.?E\.?|M\.?Tech\.?|"
+            r"B\.?Arch\.?|M\.?Arch\.?|B\.?Plan\.?|M\.?Plan\.?|"
+            r"M\.?Des\.?|Ph\.?D\.?)\b",
+            name,
+            flags=re.IGNORECASE,
+        )
+    ]
+    return degree_names or names
 
 
 def search_official_website(college, query, limit=5, complete=False):
@@ -181,7 +284,9 @@ def search_official_website(college, query, limit=5, complete=False):
         if terms.intersection(keywords):
             terms = set(keywords)
             break
-    roots = [config["website"], config["fallback"]]
+    # Course lists must stay college-specific; the central Anna University
+    # homepage links to every campus and would otherwise mix programmes.
+    roots = [config["website"]] if "courses" in terms else [config["website"], config["fallback"]]
     pages = []
     visited = set()
     errors = []
@@ -196,6 +301,15 @@ def search_official_website(college, query, limit=5, complete=False):
             continue
         pages.append(homepage)
         visited.add(homepage["url"])
+        if "courses" in terms and config.get("course_url"):
+            course_url = config["course_url"]
+            if course_url not in visited:
+                try:
+                    course_page = scrape_page(course_url)
+                    pages.append(course_page)
+                    visited.add(course_page["url"])
+                except requests.exceptions.RequestException as exc:
+                    errors.append(f"{course_url}: {exc}")
         ranked_links = sorted(
             homepage["links"],
             key=lambda link: sum(term in (link["text"] + " " + link["url"]).lower() for term in terms),

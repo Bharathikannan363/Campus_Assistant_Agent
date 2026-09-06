@@ -1,6 +1,7 @@
 import os
 import json
 import re
+from datetime import datetime
 
 from pathlib import Path
 
@@ -401,7 +402,7 @@ def ask_agent(user_message):
     # SYSTEM PROMPT
     # ==========================================
 
-    system_prompt = """
+    system_prompt = f"""
 You are an AI Campus Assistant.
 
 You help students with:
@@ -451,12 +452,12 @@ If the user says:
 "today timetable"
 "today's timetable"
 
-today is Saturday.
+today is {datetime.now().strftime("%A")}.
 
 Therefore use:
 
 student_id = 101
-day = "Saturday"
+day = "{datetime.now().strftime("%A")}"
 
 
 LOCATION RULE:
@@ -520,7 +521,7 @@ Never return "None" as an answer.
 
         response = client.chat.completions.create(
 
-            model="openai/gpt-5",
+            model="openai/gpt-4o-mini",
 
             messages=messages,
 
@@ -672,7 +673,7 @@ def _schema(name):
             "college_id": {"type": "integer"}, "name": {"type": "string"},
             "department": {"type": "string"}, "section": {"type": "string"},
             "semester": {"type": "integer"}, "day": {"type": "string"},
-            "query": {"type": "string"}, "location_name": {"type": "string"},
+            "query": {"type": "string"}, "level": {"type": "string", "enum": ["UG", "PG", "PhD"]}, "location_name": {"type": "string"},
             "source_location": {"type": "string"}, "destination_location": {"type": "string"},
             "hostel_name": {"type": "string"}, "room_type": {"type": "string"},
             "gender": {"type": "string"}, "degree": {"type": "string"},
@@ -687,7 +688,7 @@ def _run_primary(name, args):
     funcs = {
         "search_college_information": lambda: search_college_information(args["college_id"], args.get("query", "college")),
         "search_departments": lambda: search_departments(args["college_id"], args.get("query", "department")),
-        "search_courses_programs": lambda: search_courses_programs(args["college_id"], args.get("query", "course")),
+        "search_courses_programs": lambda: search_courses_programs(args["college_id"], args.get("query", "course"), args.get("level")),
         "search_admission_information": lambda: search_admission_information(args["college_id"], args.get("query", "admission")),
         "search_college_facilities": lambda: search_college_facilities(args["college_id"], args.get("query", "facility")),
         "search_campus_location": lambda: search_campus_location_for_college(args["college_id"], args.get("name", "")),
@@ -723,17 +724,30 @@ def _resolve_college(user_message, default_college_id):
 def _direct_tool_request(message):
     text = message.lower()
     has = lambda *words: any(re.search(r"\b" + re.escape(word) + r"\b", text) for word in words)
-    if "official website" in text or "official url" in text or "official link" in text or "college link" in text or text.strip().endswith(" college"):
+    is_plain_college_request = text.strip().endswith(" college") and not has(
+        "course", "courses", "corse", "corses", "program", "department",
+        "facility", "facilities", "admission", "map", "location", "where",
+    )
+    if "official website" in text or "official url" in text or "official link" in text or "college link" in text or is_plain_college_request:
         return "get_college_official_urls", {}
-    if has("where is", "location", "located", "building", "library", "laboratory", "block", "seminar hall"):
-        location_terms = ("seminar hall", "library", "laboratory", "lab", "building", "block", "location", "located")
+    if has("map", "where is", "location", "located"):
+        location_terms = ("seminar hall", "library", "laboratory", "lab", "building", "block", "location", "located", "map")
+        return "search_campus_location", {
+            "name": next((term for term in location_terms if term in text), text)
+        }
+    if has("building", "library", "laboratory", "block", "seminar hall"):
+        location_terms = ("seminar hall", "library", "laboratory", "lab", "building", "block", "location", "located", "map")
         return "search_campus_location", {
             "name": next((term for term in location_terms if term in text), text)
         }
     if has("department", "departments", "branch", "branches"):
         return "search_departments", {"query": "department"}
-    if has("course", "courses", "program", "programs", "ug", "pg"):
-        return "search_courses_programs", {"query": text}
+    if has("course", "courses", "corse", "corses", "coruse", "coruses",
+           "program", "programs", "programme", "programmes",
+           "offering", "offerings", "offered",
+           "syllabus", "curriculum", "degree",
+           "ug", "pg", "btech", "mtech", "b.tech", "m.tech", "b.e", "m.e", "ph.d"):
+        return "search_courses_programs", {"query": text, "level": "PG" if has("pg", "postgraduate", "post graduate") else "UG" if has("ug", "undergraduate") else None}
     if has("admission", "admissions", "eligibility", "apply"):
         return "search_admission_information", {"query": text}
     if has("facility", "facilities", "hostel", "canteen", "laboratory"):
@@ -770,6 +784,29 @@ def _direct_answer(tool_name, result):
         if tool_name == "search_courses_programs":
             return "I couldn't find a course record in the local index yet. Please use the official course sources below."
         return f"I couldn't find that {label} in the available official campus sources."
+    if tool_name == "search_courses_programs" and result.get("course_levels"):
+        college = None
+        if result.get("college_id"):
+            source = _college_source(result["college_id"])
+            college = source["short_name"] if source else None
+        sections = []
+        requested_level = result.get("requested_level")
+        levels = {
+            section: courses for section, courses in result["course_levels"].items()
+            if not requested_level or requested_level.lower() in section.lower()
+        }
+        if requested_level and not levels:
+            return f"I could not find verified {requested_level} course information on the available official sources."
+        for section, courses in levels.items():
+            lines = "\n".join(f"{index}. {course}" for index, course in enumerate(courses, 1))
+            sections.append(f"{section}\n{lines}")
+        heading = f"Courses offered at {college}" if college else "Courses offered"
+        return heading + "\n\n" + "\n\n".join(sections)
+    if tool_name == "search_courses_programs" and result.get("course_retrieval_incomplete"):
+        return (
+            "I could not verify a complete college-specific course list from the available "
+            "official pages. Please use the official course sources below."
+        )
     if tool_name == "search_courses_programs" and result.get("course_names"):
         college = None
         if result.get("college_id"):
@@ -863,6 +900,8 @@ def ask_agent_for_college(user_message, college_id, history=None):
     effective_college_id = _resolve_college(user_message, college_id)
     tool_name, arguments = _direct_tool_request(user_message)
     result = _run_primary(tool_name, {"college_id": effective_college_id, **arguments})
+    if tool_name == "search_courses_programs":
+        result["requested_level"] = arguments.get("level")
     if tool_name != "search_college_information" or not os.getenv("OPENROUTER_ENABLE_GENERAL_CHAT"):
         return {
             "answer": _direct_answer(tool_name, result),
@@ -921,5 +960,3 @@ def ask_agent_for_college(user_message, college_id, history=None):
         }
     answer = result["messages"][-1].get("content", "I could not generate a response.")
     return {"answer": answer, "tool_used": result.get("tool_used"), "sources": result.get("sources", [])}
-
-        # and generates the final answer.

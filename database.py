@@ -92,7 +92,17 @@ def create_database():
       content TEXT NOT NULL, tool_name TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(conversation_id) REFERENCES conversations(id)
     );
+    CREATE TABLE IF NOT EXISTS web_cache (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cache_key TEXT UNIQUE NOT NULL,
+      college_id INTEGER,
+      tool_name TEXT,
+      result_json TEXT NOT NULL,
+      scraped_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      ttl_seconds INTEGER NOT NULL DEFAULT 3600
+    );
     """)
+
     colleges = [
         ("College of Engineering, Guindy", "CEG", "https://ceg.annauniv.edu/"),
         ("Madras Institute of Technology", "MIT", "https://mitindia.edu/"),
@@ -111,8 +121,63 @@ def create_database():
     db.close()
 
 
+import json as _json
+from datetime import datetime as _dt, timezone as _tz
+
 create_database()
 
+
+# ==========================================
+# WEB CACHE HELPERS
+# ==========================================
+
+def cache_get(cache_key: str):
+    """Return cached JSON data if still within TTL, else None."""
+    db = get_connection()
+    row = db.execute(
+        "SELECT result_json, scraped_at, ttl_seconds FROM web_cache WHERE cache_key=?",
+        (cache_key,)
+    ).fetchone()
+    db.close()
+    if not row:
+        return None
+    try:
+        scraped_at = _dt.fromisoformat(row["scraped_at"].replace("Z", "+00:00"))
+        age = (_dt.now(_tz.utc) - scraped_at).total_seconds()
+        if age > row["ttl_seconds"]:
+            return None
+        return _json.loads(row["result_json"])
+    except Exception:
+        return None
+
+
+def cache_set(cache_key: str, data, college_id=None, tool_name=None, ttl_seconds=3600):
+    """Store data in the web_cache table."""
+    db = get_connection()
+    try:
+        db.execute(
+            """INSERT INTO web_cache (cache_key, college_id, tool_name, result_json,
+               scraped_at, ttl_seconds)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(cache_key) DO UPDATE SET
+                 result_json=excluded.result_json,
+                 scraped_at=excluded.scraped_at,
+                 ttl_seconds=excluded.ttl_seconds""",
+            (cache_key, college_id, tool_name,
+             _json.dumps(data, default=str),
+             _dt.now(_tz.utc).isoformat(), ttl_seconds)
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
+def cache_invalidate(cache_key: str):
+    """Delete a specific cache entry."""
+    db = get_connection()
+    db.execute("DELETE FROM web_cache WHERE cache_key=?", (cache_key,))
+    db.commit()
+    db.close()
 
 def create_legacy_database():
 

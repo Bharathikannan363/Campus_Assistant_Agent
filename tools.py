@@ -600,7 +600,7 @@ def search_departments(college_id, query="department"):
                 "sources": _official_sources(rows, source, "Official department source")}
 
 
-def search_courses_programs(college_id, query="course"):
+def search_courses_programs(college_id, query="course", level=None):
         complete = _wants_complete(query)
         courses = search_course_in_college(college_id, query=query).get("courses", [])
         source = _college_source(college_id)
@@ -612,8 +612,15 @@ def search_courses_programs(college_id, query="course"):
             course_names = scraped_data.get("course_names", [])
         config = SUPPORTED_COLLEGES.get(source["short_name"]) if source else None
         configured_programs = list((config or {}).get("course_programs", ()))
-        if configured_programs:
+        if configured_programs and not course_names:
             course_names = configured_programs
+        if source and source["short_name"] in ("ACT", "SAP") and course_names:
+            college_path = f"/{source['short_name'].lower()}/"
+            valid_names = [
+                name for name in course_names
+                if any(college_path in (row.get("url") or "").lower() for row in scraped)
+            ]
+            course_names = valid_names
         sources = []
         if source and source["website_url"]:
             sources.append({"title": f"{source['short_name']} official website", "url": source["website_url"]})
@@ -631,6 +638,8 @@ def search_courses_programs(college_id, query="course"):
             "college_id": college_id,
             "courses": courses or scraped,
             "course_names": course_names,
+            "course_retrieval_incomplete": bool(source and source["short_name"] in ("ACT", "SAP") and not course_names),
+            "course_levels": (config or {}).get("course_levels", {}),
             "sources": unique_sources,
         }
 
