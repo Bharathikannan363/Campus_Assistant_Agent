@@ -4,6 +4,14 @@ Web application for CEG, MIT, SAP, and ACT with college-scoped tools,
 conversation history, source-aware scraping, RAG metadata, JWT
 authentication, and optional LangGraph/OpenRouter tool calling.
 
+## System architecture
+
+![AI Campus Assistant system architecture](docs/ai-campus-assistant-system-architecture.svg)
+
+The architecture diagram shows the student request flow, all ten public
+information tools, the official-source web information layer, supported
+colleges, the special official-URL flow, and the project technology stack.
+
 ## Run
 
 ```powershell

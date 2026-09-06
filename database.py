@@ -94,15 +94,19 @@ def create_database():
     );
     """)
     colleges = [
-        ("College of Engineering, Guindy", "CEG"),
-        ("Madras Institute of Technology", "MIT"),
-        ("School of Architecture and Planning", "SAP"),
-        ("Alagappa College of Technology", "ACT"),
+        ("College of Engineering, Guindy", "CEG", "https://ceg.annauniv.edu/"),
+        ("Madras Institute of Technology", "MIT", "https://mitindia.edu/"),
+        ("School of Architecture and Planning", "SAP", "https://www.annauniv.edu/sap/"),
+        ("Alagappa College of Technology", "ACT", "https://www.annauniv.edu/act/"),
     ]
-    for name, short in colleges:
+    for name, short, website_url in colleges:
         db.execute("""INSERT OR IGNORE INTO colleges
-          (name,short_name,district,state) VALUES (?,?,?,?)""",
-                   (name, short, "Chennai", "Tamil Nadu"))
+          (name,short_name,district,state,website_url) VALUES (?,?,?,?,?)""",
+                   (name, short, "Chennai", "Tamil Nadu", website_url))
+        db.execute(
+            "UPDATE colleges SET website_url=? WHERE short_name=? AND (website_url IS NULL OR website_url='')",
+            (website_url, short),
+        )
     db.commit()
     db.close()
 

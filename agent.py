@@ -7,6 +7,7 @@ from memory import add_message, get_memory
 
 from dotenv import load_dotenv
 from openai import AuthenticationError, OpenAI
+from database import get_connection
 
 from tools import (
     search_campus_location,
@@ -21,7 +22,10 @@ from tools import (
     PRIMARY_TOOL_NAMES, search_campus_location_for_college,
     get_student_timetable_for_college, check_hostel_availability,
     get_hostel_room_detail, search_college_announcements, search_college_events,
-    search_course_in_college, get_academic_calendar, college_map
+    search_course_in_college, get_academic_calendar, college_map,
+    get_college_official_urls, search_college_information, search_departments,
+    search_courses_programs, search_admission_information, search_college_facilities,
+    search_college_contacts, search_academic_information, _college_source
 )
 
 
@@ -680,21 +684,148 @@ PRIMARY_TOOLS = [_schema(n) for n in PRIMARY_TOOL_NAMES]
 
 def _run_primary(name, args):
     funcs = {
+        "search_college_information": lambda: search_college_information(args["college_id"], args.get("query", "college")),
+        "search_departments": lambda: search_departments(args["college_id"], args.get("query", "department")),
+        "search_courses_programs": lambda: search_courses_programs(args["college_id"], args.get("query", "course")),
+        "search_admission_information": lambda: search_admission_information(args["college_id"], args.get("query", "admission")),
+        "search_college_facilities": lambda: search_college_facilities(args["college_id"], args.get("query", "facility")),
         "search_campus_location": lambda: search_campus_location_for_college(args["college_id"], args.get("name", "")),
-        "get_student_timetable": lambda: get_student_timetable_for_college(args["college_id"], args.get("department"), args.get("section"), args.get("semester"), day=args.get("day")),
-        "check_hostel_availability": lambda: check_hostel_availability(args["college_id"], args.get("hostel_name"), args.get("gender"), args.get("room_type")),
-        "get_hostel_room_detail": lambda: get_hostel_room_detail(args["college_id"], args.get("hostel_name"), args.get("room_type")),
+        "search_college_contacts": lambda: search_college_contacts(args["college_id"], args.get("query", "contact")),
         "search_college_announcements": lambda: search_college_announcements(args["college_id"], args.get("query")),
-        "search_college_events": lambda: search_college_events(args["college_id"], args.get("query"), event_type=args.get("event_type")),
-        "search_course_in_college": lambda: search_course_in_college(args["college_id"], args.get("name"), args.get("degree"), args.get("department"), args.get("query")),
-        "get_academic_calendar": lambda: get_academic_calendar(args["college_id"], args.get("academic_year"), args.get("semester")),
-        "college_map": lambda: college_map(args["college_id"], args.get("location_name"), args.get("source_location"), args.get("destination_location")),
+        "search_academic_information": lambda: search_academic_information(args["college_id"], args.get("query", "academic")),
+        "get_college_official_urls": lambda: get_college_official_urls(args["college_id"]),
     }
     return funcs[name]()
 
 
+def _resolve_college(user_message, default_college_id):
+    message = user_message.lower()
+    conn = get_connection()
+    rows = conn.execute("SELECT id, short_name, name FROM colleges WHERE is_active=1").fetchall()
+    conn.close()
+    for row in rows:
+        if row["short_name"].lower() in message or row["name"].lower() in message:
+            return row["id"]
+    aliases = {
+        "college of engineering guindy": "CEG",
+        "madras institute of technology chennai": "MIT",
+        "alaguappa college of technology": "ACT",
+        "alagappa college of technology": "ACT",
+        "school of architecture and planning": "SAP",
+    }
+    for alias, short_name in aliases.items():
+        if alias in message:
+            return next(row["id"] for row in rows if row["short_name"] == short_name)
+    return default_college_id
+
+
+def _direct_tool_request(message):
+    text = message.lower()
+    if "official website" in text or "official url" in text or "official link" in text or "college link" in text or text.strip().endswith(" college"):
+        return "get_college_official_urls", {}
+    if any(word in text for word in ("where is", "location", "building", "library", "lab", "block", "seminar hall")):
+        location_terms = ("seminar hall", "library", "laboratory", "lab", "building", "block", "location")
+        return "search_campus_location", {
+            "name": next((term for term in location_terms if term in text), text)
+        }
+    if any(word in text for word in ("department", "departments", "branch", "branches")):
+        return "search_departments", {"query": "department"}
+    if any(word in text for word in ("course", "courses", "program", "programs", "ug", "pg")):
+        return "search_courses_programs", {"query": text}
+    if any(word in text for word in ("admission", "admissions", "eligibility", "apply")):
+        return "search_admission_information", {"query": text}
+    if any(word in text for word in ("facility", "facilities", "hostel", "library", "laboratory")):
+        return "search_college_facilities", {"query": text}
+    if any(word in text for word in ("contact", "phone", "email", "address")):
+        return "search_college_contacts", {"query": text}
+    if any(word in text for word in ("announcement", "announcements", "notice", "news", "update")):
+        return "search_college_announcements", {"query": text}
+    if any(word in text for word in ("academic", "semester", "exam", "regulation", "calendar")):
+        return "search_academic_information", {"query": text}
+    return "search_college_information", {"query": text}
+
+
+def _direct_answer(tool_name, result):
+    collections = {
+        "search_college_information": ("information", "official college information"),
+        "search_departments": ("departments", "departments"),
+        "search_courses_programs": ("courses", "courses and programs"),
+        "search_admission_information": ("admissions", "admission information"),
+        "search_college_facilities": ("facilities", "facilities"),
+        "search_campus_location": ("locations", "campus locations"),
+        "search_college_contacts": ("contacts", "college contacts"),
+        "search_college_announcements": ("announcements", "announcements"),
+        "search_academic_information": ("academic_information", "academic information"),
+    }
+    if tool_name == "get_college_official_urls":
+        website = result.get("official_website")
+        if not website:
+            return "I couldn't find an official website in the available campus sources."
+        return f"The official {result.get('college', 'college')} website is available in the links below."
+    key, label = collections[tool_name]
+    values = result.get(key) or []
+    if not values:
+        if tool_name == "search_courses_programs":
+            return "I couldn't find a course record in the local index yet. Please use the official course sources below."
+        return f"I couldn't find that {label} in the available official campus sources."
+    snippets = []
+    link_terms = {
+        "search_courses_programs": ("course", "program", "prospectus", "academic", "admission", "degree", "ug", "pg"),
+        "search_college_facilities": ("facility", "library", "sports", "hostel", "health", "canteen", "laboratory"),
+        "search_campus_location": ("library", "location", "campus", "map", "building"),
+        "search_departments": ("department", "faculty", "school", "branch"),
+        "search_admission_information": ("admission", "application", "fee", "eligibility"),
+        "search_college_contacts": ("contact", "phone", "email", "address", "office"),
+        "search_college_announcements": ("announcement", "news", "notice", "event", "circular"),
+        "search_academic_information": ("academic", "calendar", "regulation", "syllabus", "examination"),
+    }.get(tool_name, ())
+    for value in values[:3]:
+        links = value.get("links") or []
+        relevant_links = []
+        for link in links:
+            link_label = " ".join((link.get("text") or "").split())
+            if link_label and (not link_terms or any(term in link_label.lower() for term in link_terms)) and link_label not in relevant_links:
+                relevant_links.append(f"- {link_label}: {link.get('url')}")
+        if relevant_links:
+            snippets.extend(relevant_links[:8])
+            continue
+        content = value.get("content") or value.get("description") or value.get("title")
+        if content:
+            clean = " ".join(str(content).split())
+            if clean.startswith("%PDF"):
+                continue
+            snippets.append(f"- {clean[:700]}")
+    if snippets:
+        college = None
+        if result.get("college_id"):
+            source = _college_source(result["college_id"])
+            college = source["short_name"] if source else None
+        subject = f"{college} {label}" if college else label
+        answer = f"Here is the official information I found about {subject}:\n" + "\n".join(snippets)
+        if tool_name == "search_courses_programs":
+            shown = "\n".join(snippets)
+            extra_sources = [
+                f"- {source['title']}: {source['url']}"
+                for source in result.get("sources", [])
+                if source["url"] not in shown
+            ]
+            if extra_sources:
+                answer += "\n\nOfficial links are shown below."
+        return answer
+    return f"I found {len(values)} {label} record(s) in the available official campus sources."
+
+
 def ask_agent_for_college(user_message, college_id, history=None):
     global client
+    effective_college_id = _resolve_college(user_message, college_id)
+    tool_name, arguments = _direct_tool_request(user_message)
+    result = _run_primary(tool_name, {"college_id": effective_college_id, **arguments})
+    if tool_name != "search_college_information" or not os.getenv("OPENROUTER_ENABLE_GENERAL_CHAT"):
+        return {
+            "answer": _direct_answer(tool_name, result),
+            "tool_used": tool_name,
+            "sources": result.get("sources", []),
+        }
     try:
         api_key = _configured_api_key()
     except RuntimeError as exc:

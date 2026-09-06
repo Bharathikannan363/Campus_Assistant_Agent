@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1200" viewBox="0 0 1920 1200" role="img" aria-labelledby="title desc">
+  <title id="title">AI Campus Assistant - System Architecture</title>
+  <desc id="desc">Architecture diagram showing the student request flow through the AI campus assistant, AI agent, ten public information tools, web scraping layer, and official Anna University college websites.</desc>
+  <defs>
+    <linearGradient id="header" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#123B62"/>
+      <stop offset="1" stop-color="#176B87"/>
+    </linearGradient>
+    <linearGradient id="agent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1D6F8C"/>
+      <stop offset="1" stop-color="#2C8D88"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#17324D" flood-opacity=".12"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#52708A"/>
+    </marker>
+    <style>
+      .title { font: 700 34px Arial, sans-serif; letter-spacing: 2px; fill: #FFFFFF; }
+      .subtitle { font: 400 18px Arial, sans-serif; letter-spacing: .5px; fill: #D8EDF2; }
+      .section { font: 700 17px Arial, sans-serif; letter-spacing: 1.2px; fill: #123B62; }
+      .box-title { font: 700 20px Arial, sans-serif; fill: #123B62; }
+      .box-title-white { font: 700 20px Arial, sans-serif; fill: #FFFFFF; }
+      .body { font: 400 15px Arial, sans-serif; fill: #36546A; }
+      .body-white { font: 400 15px Arial, sans-serif; fill: #EAF7F7; }
+      .small { font: 400 13px Arial, sans-serif; fill: #5C7588; }
+      .tool { font: 600 14px Arial, sans-serif; fill: #244760; }
+      .college-small { font: 600 13px Arial, sans-serif; fill: #123B62; }
+      .stack { font: 600 15px Arial, sans-serif; fill: #244760; }
+      .label { font: 700 12px Arial, sans-serif; letter-spacing: 1px; fill: #2C8D88; }
+    </style>
+  </defs>
+
+  <rect width="1920" height="1200" fill="#F5F9FC"/>
+  <rect x="0" y="0" width="1920" height="126" fill="url(#header)"/>
+  <circle cx="1780" cy="18" r="210" fill="#FFFFFF" opacity=".05"/>
+  <circle cx="1870" cy="100" r="130" fill="#FFFFFF" opacity=".05"/>
+  <text x="80" y="58" class="title">AI CAMPUS ASSISTANT – SYSTEM ARCHITECTURE</text>
+  <text x="80" y="91" class="subtitle">AI-Powered Public College Information and Student Assistance System</text>
+  <text x="1835" y="73" text-anchor="end" class="subtitle">FINAL-YEAR ENGINEERING PROJECT</text>
+
+  <text x="80" y="166" class="section">REQUEST-TO-ANSWER PIPELINE</text>
+  <line x1="80" y1="180" x2="1840" y2="180" stroke="#D5E4EC" stroke-width="2"/>
+
+  <rect x="80" y="215" width="230" height="116" rx="18" fill="#FFFFFF" stroke="#B8D0DE" stroke-width="2" filter="url(#shadow)"/>
+  <circle cx="125" cy="273" r="24" fill="#E2F2F3"/>
+  <path d="M115 278c0-9 5-16 10-16s10 7 10 16M118 258a7 7 0 1 0 14 0" fill="none" stroke="#1D6F8C" stroke-width="3" stroke-linecap="round"/>
+  <text x="164" y="266" class="box-title">Student /</text>
+  <text x="164" y="291" class="box-title">Public User</text>
+
+  <line x1="310" y1="273" x2="350" y2="273" stroke="#52708A" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="350" y="215" width="245" height="116" rx="18" fill="#E7F4F5" stroke="#83C6C3" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="350" y="215" width="8" height="116" rx="4" fill="#2C8D88"/>
+  <text x="382" y="267" class="box-title">AI Campus</text>
+  <text x="382" y="292" class="box-title">Assistant</text>
+  <text x="382" y="316" class="small">Conversation &amp; response layer</text>
+
+  <line x1="595" y1="273" x2="635" y2="273" stroke="#52708A" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="635" y="197" width="275" height="152" rx="18" fill="url(#agent)" filter="url(#shadow)"/>
+  <text x="672" y="260" class="box-title-white">AI Agent / LLM</text>
+  <text x="672" y="288" class="body-white">Understands intent</text>
+  <text x="672" y="312" class="body-white">Selects the right tool</text>
+  <text x="672" y="336" class="body-white">for the user question</text>
+
+  <line x1="910" y1="273" x2="950" y2="273" stroke="#52708A" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="950" y="197" width="430" height="322" rx="18" fill="#FFFFFF" stroke="#B8D0DE" stroke-width="2" filter="url(#shadow)"/>
+  <text x="985" y="236" class="box-title">10 Public Information Tools</text>
+  <text x="985" y="260" class="small">Agent routes each question to one tool</text>
+  <line x1="985" y1="277" x2="1345" y2="277" stroke="#E2ECF1" stroke-width="2"/>
+  <rect x="975" y="293" width="180" height="36" rx="9" fill="#F0F6FA"/><text x="990" y="316" class="tool">1  Search College Information</text>
+  <rect x="1170" y="293" width="180" height="36" rx="9" fill="#F0F6FA"/><text x="1185" y="316" class="tool">2  Search Departments</text>
+  <rect x="975" y="339" width="180" height="36" rx="9" fill="#F0F6FA"/><text x="990" y="362" class="tool">3  Search Courses &amp; Programs</text>
+  <rect x="1170" y="339" width="180" height="36" rx="9" fill="#F0F6FA"/><text x="1185" y="362" class="tool">4  Search Admission Information</text>
+  <rect x="975" y="385" width="180" height="36" rx="9" fill="#F0F6FA"/><text x="990" y="408" class="tool">5  Search College Facilities</text>
+  <rect x="1170" y="385" width="180" height="36" rx="9" fill="#F0F6FA"/><text x="1185" y="408" class="tool">6  Search Campus Location</text>
+  <rect x="975" y="431" width="180" height="36" rx="9" fill="#F0F6FA"/><text x="990" y="454" class="tool">7  Search College Contacts</text>
+  <rect x="1170" y="431" width="180" height="36" rx="9" fill="#F0F6FA"/><text x="1185" y="454" class="tool">8  Search College Announcements</text>
+  <rect x="975" y="477" width="180" height="36" rx="9" fill="#F0F6FA"/><text x="990" y="500" class="tool">9  Search Academic Information</text>
+  <rect x="1170" y="477" width="180" height="36" rx="9" fill="#DDF4EE" stroke="#2C8D88" stroke-width="2"/><text x="1185" y="500" class="tool">10  Get College Official URLs</text>
+
+  <line x1="1380" y1="273" x2="1420" y2="273" stroke="#52708A" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="1420" y="215" width="420" height="304" rx="18" fill="#123B62" filter="url(#shadow)"/>
+  <text x="1455" y="255" class="box-title-white">Web Information Layer</text>
+  <text x="1455" y="280" class="body-white">Official-source collection and retrieval</text>
+  <line x1="1455" y1="298" x2="1805" y2="298" stroke="#47728B" stroke-width="2"/>
+  <rect x="1455" y="322" width="153" height="55" rx="12" fill="#1B5274"/><text x="1531" y="355" text-anchor="middle" class="body-white">Requests</text>
+  <rect x="1622" y="322" width="183" height="55" rx="12" fill="#1B5274"/><text x="1713" y="355" text-anchor="middle" class="body-white">BeautifulSoup4</text>
+  <rect x="1455" y="391" width="153" height="55" rx="12" fill="#1B5274"/><text x="1531" y="424" text-anchor="middle" class="body-white">LXML</text>
+  <rect x="1622" y="391" width="183" height="55" rx="12" fill="#1B5274"/><text x="1713" y="424" text-anchor="middle" class="body-white">Web Search / Web Scraping</text>
+  <text x="1455" y="478" class="small" fill="#BBD6E1">Robots-aware • public pages only • source-aware results</text>
+
+  <line x1="1630" y1="519" x2="1630" y2="570" stroke="#52708A" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="1310" y="570" width="640" height="215" rx="18" fill="#FFFFFF" stroke="#B8D0DE" stroke-width="2" filter="url(#shadow)"/>
+  <text x="1345" y="610" class="box-title">Official College / Anna University Websites</text>
+  <text x="1345" y="636" class="small">Authoritative public information sources</text>
+  <line x1="1345" y1="653" x2="1915" y2="653" stroke="#E2ECF1" stroke-width="2"/>
+  <text x="1345" y="680" class="label">SUPPORTED COLLEGES — SEARCH IS LIMITED TO THESE FOUR</text>
+  <rect x="1345" y="700" width="270" height="36" rx="11" fill="#EEF6FA"/><text x="1359" y="723" class="college-small">CEG – College of Engineering Guindy</text>
+  <rect x="1635" y="700" width="270" height="36" rx="11" fill="#EEF6FA"/><text x="1649" y="723" class="college-small">MIT – Madras Institute of Technology</text>
+  <rect x="1345" y="746" width="270" height="36" rx="11" fill="#EEF6FA"/><text x="1359" y="769" class="college-small">ACT – Alagappa College of Technology</text>
+  <rect x="1635" y="746" width="270" height="36" rx="11" fill="#EEF6FA"/><text x="1649" y="769" class="college-small">SAP – School of Architecture and Planning</text>
+
+  <rect x="80" y="570" width="1160" height="215" rx="18" fill="#FFF8E9" stroke="#E9B84D" stroke-width="2" filter="url(#shadow)"/>
+  <text x="115" y="610" class="box-title">Special URL Tool — Guided Official Links</text>
+  <text x="115" y="637" class="small">A college name request returns a structured set of trusted destinations.</text>
+  <rect x="115" y="665" width="246" height="83" rx="12" fill="#FFFFFF" stroke="#E9B84D" stroke-width="2"/>
+  <text x="135" y="693" class="label">USER</text><text x="135" y="720" class="body">“CEG college”</text>
+  <line x1="361" y1="706" x2="405" y2="706" stroke="#B68722" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="405" y="665" width="190" height="83" rx="12" fill="#FFFFFF" stroke="#E9B84D" stroke-width="2"/>
+  <text x="425" y="693" class="label">AI AGENT</text><text x="425" y="720" class="body">Identifies CEG</text>
+  <line x1="595" y1="706" x2="639" y2="706" stroke="#B68722" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="639" y="665" width="248" height="83" rx="12" fill="#DDF4EE" stroke="#2C8D88" stroke-width="2"/>
+  <text x="659" y="693" class="label">SELECTED TOOL</text><text x="659" y="720" class="body">Get College Official URLs</text>
+  <line x1="887" y1="706" x2="931" y2="706" stroke="#B68722" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="931" y="665" width="270" height="83" rx="12" fill="#FFFFFF" stroke="#E9B84D" stroke-width="2"/>
+  <text x="951" y="690" class="label">RETURNED LINK CATEGORIES</text>
+  <text x="951" y="713" class="small">Official Website • Admissions • Departments</text>
+  <text x="951" y="733" class="small">Courses / Programs • Facilities • Campus / Location</text>
+  <text x="951" y="753" class="small">Announcements • Academic Information • Research • Contact</text>
+
+  <rect x="80" y="845" width="1160" height="245" rx="18" fill="#FFFFFF" stroke="#B8D0DE" stroke-width="2" filter="url(#shadow)"/>
+  <text x="115" y="885" class="box-title">Technology Stack</text>
+  <text x="115" y="912" class="small">Core components used to implement the assistant</text>
+  <line x1="115" y1="930" x2="1205" y2="930" stroke="#E2ECF1" stroke-width="2"/>
+  <rect x="115" y="955" width="240" height="43" rx="10" fill="#EEF6FA"/><text x="235" y="982" text-anchor="middle" class="stack">Python</text>
+  <rect x="375" y="955" width="240" height="43" rx="10" fill="#EEF6FA"/><text x="495" y="982" text-anchor="middle" class="stack">OpenRouter / LLM</text>
+  <rect x="635" y="955" width="240" height="43" rx="10" fill="#EEF6FA"/><text x="755" y="982" text-anchor="middle" class="stack">OpenAI-compatible Python SDK</text>
+  <rect x="895" y="955" width="240" height="43" rx="10" fill="#EEF6FA"/><text x="1015" y="982" text-anchor="middle" class="stack">SQLite</text>
+  <rect x="115" y="1015" width="240" height="43" rx="10" fill="#EEF6FA"/><text x="235" y="1042" text-anchor="middle" class="stack">Requests</text>
+  <rect x="375" y="1015" width="240" height="43" rx="10" fill="#EEF6FA"/><text x="495" y="1042" text-anchor="middle" class="stack">BeautifulSoup4</text>
+  <rect x="635" y="1015" width="240" height="43" rx="10" fill="#EEF6FA"/><text x="755" y="1042" text-anchor="middle" class="stack">LXML</text>
+  <rect x="895" y="1015" width="240" height="43" rx="10" fill="#EEF6FA"/><text x="1015" y="1042" text-anchor="middle" class="stack">Python-dotenv</text>
+
+  <text x="1310" y="845" class="section">TRUST BOUNDARY</text>
+  <line x1="1310" y1="858" x2="1840" y2="858" stroke="#D5E4EC" stroke-width="2"/>
+  <text x="1310" y="895" class="body">The AI Agent may search only</text>
+  <text x="1310" y="921" class="body">the four supported colleges and</text>
+  <text x="1310" y="947" class="body">their official public sources.</text>
+  <rect x="1310" y="980" width="530" height="76" rx="13" fill="#E7F4F5"/>
+  <text x="1335" y="1012" class="body">Reliable, college-scoped answers</text>
+  <text x="1335" y="1037" class="small">Official sources • transparent tool routing • reusable links</text>
+</svg>
