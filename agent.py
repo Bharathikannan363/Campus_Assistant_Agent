@@ -1,5 +1,6 @@
 import os
 import json
+import re
 
 from pathlib import Path
 
@@ -721,26 +722,27 @@ def _resolve_college(user_message, default_college_id):
 
 def _direct_tool_request(message):
     text = message.lower()
+    has = lambda *words: any(re.search(r"\b" + re.escape(word) + r"\b", text) for word in words)
     if "official website" in text or "official url" in text or "official link" in text or "college link" in text or text.strip().endswith(" college"):
         return "get_college_official_urls", {}
-    if any(word in text for word in ("where is", "location", "building", "library", "lab", "block", "seminar hall")):
-        location_terms = ("seminar hall", "library", "laboratory", "lab", "building", "block", "location")
+    if has("where is", "location", "located", "building", "library", "laboratory", "block", "seminar hall"):
+        location_terms = ("seminar hall", "library", "laboratory", "lab", "building", "block", "location", "located")
         return "search_campus_location", {
             "name": next((term for term in location_terms if term in text), text)
         }
-    if any(word in text for word in ("department", "departments", "branch", "branches")):
+    if has("department", "departments", "branch", "branches"):
         return "search_departments", {"query": "department"}
-    if any(word in text for word in ("course", "courses", "program", "programs", "ug", "pg")):
+    if has("course", "courses", "program", "programs", "ug", "pg"):
         return "search_courses_programs", {"query": text}
-    if any(word in text for word in ("admission", "admissions", "eligibility", "apply")):
+    if has("admission", "admissions", "eligibility", "apply"):
         return "search_admission_information", {"query": text}
-    if any(word in text for word in ("facility", "facilities", "hostel", "library", "laboratory")):
+    if has("facility", "facilities", "hostel", "canteen", "laboratory"):
         return "search_college_facilities", {"query": text}
-    if any(word in text for word in ("contact", "phone", "email", "address")):
+    if has("contact", "phone", "email", "address"):
         return "search_college_contacts", {"query": text}
-    if any(word in text for word in ("announcement", "announcements", "notice", "news", "update")):
+    if has("announcement", "announcements", "notice", "news", "update"):
         return "search_college_announcements", {"query": text}
-    if any(word in text for word in ("academic", "semester", "exam", "regulation", "calendar")):
+    if has("academic", "semester", "exam", "regulation", "calendar"):
         return "search_academic_information", {"query": text}
     return "search_college_information", {"query": text}
 
@@ -768,49 +770,90 @@ def _direct_answer(tool_name, result):
         if tool_name == "search_courses_programs":
             return "I couldn't find a course record in the local index yet. Please use the official course sources below."
         return f"I couldn't find that {label} in the available official campus sources."
+    if tool_name == "search_courses_programs" and result.get("course_names"):
+        college = None
+        if result.get("college_id"):
+            source = _college_source(result["college_id"])
+            college = source["short_name"] if source else None
+        heading = f"Courses offered at {college}" if college else "Courses offered"
+        course_lines = "\n".join(
+            f"{index}. {course}" for index, course in enumerate(result["course_names"], 1)
+        )
+        return f"{heading}\n\nPrograms and courses\n{course_lines}"
     snippets = []
+    irrelevant_terms = (
+        "alumni", "alumnus", "convocation", "chairman", "governor",
+        "biography", "born in", "schooling", "doctoral studies",
+        "commentator", "copyright", "history", "historical",
+    )
+    category_noise = {
+        "search_college_facilities": ("agni", "he has", "curriculum", "distance education", "university industry", "academics"),
+        "search_campus_location": ("department", "engineering", "academic", "examination", "workshop", "programme", "course"),
+        "search_courses_programs": (
+            "convocation", "chairman", "governor", "biography", "he has",
+            "he graduated", "after graduating", "received", "contributed",
+            "born in", "first institution", "workshop", "notification",
+            "scholarship", "programme at", "academic calendar", "academics",
+            " from ", " mr.", " mr ", " ms.", " she ", " he ",
+            "swayam", "certificate course", "faculty development",
+            "student skill", "petronas", "international admissions",
+            "admission", "department of", "ayyala",
+        ),
+    }
     link_terms = {
-        "search_courses_programs": ("course", "program", "prospectus", "academic", "admission", "degree", "ug", "pg"),
-        "search_college_facilities": ("facility", "library", "sports", "hostel", "health", "canteen", "laboratory"),
-        "search_campus_location": ("library", "location", "campus", "map", "building"),
+        "search_courses_programs": ("course", "courses", "program", "programme", "programmes", "prospectus", "degree", "ug", "pg", "b.e", "b.tech", "m.e", "m.tech", "ph.d"),
+        "search_college_facilities": ("library", "sports", "hostel", "health", "canteen", "laboratory", "lab", "auditorium", "gym", "research facilities"),
+        "search_campus_location": ("library", "location", "located", "campus", "map", "building", "landmark", "address"),
         "search_departments": ("department", "faculty", "school", "branch"),
         "search_admission_information": ("admission", "application", "fee", "eligibility"),
         "search_college_contacts": ("contact", "phone", "email", "address", "office"),
         "search_college_announcements": ("announcement", "news", "notice", "event", "circular"),
         "search_academic_information": ("academic", "calendar", "regulation", "syllabus", "examination"),
     }.get(tool_name, ())
-    for value in values[:3]:
-        links = value.get("links") or []
-        relevant_links = []
-        for link in links:
-            link_label = " ".join((link.get("text") or "").split())
-            if link_label and (not link_terms or any(term in link_label.lower() for term in link_terms)) and link_label not in relevant_links:
-                relevant_links.append(f"- {link_label}: {link.get('url')}")
-        if relevant_links:
-            snippets.extend(relevant_links[:8])
-            continue
+    for value in values:
         content = value.get("content") or value.get("description") or value.get("title")
         if content:
-            clean = " ".join(str(content).split())
-            if clean.startswith("%PDF"):
-                continue
-            snippets.append(f"- {clean[:700]}")
+            fragments = [fragment.strip() for fragment in str(content).split("|")]
+            for fragment in fragments:
+                clean = " ".join(fragment.split())
+                text_without_urls = re.sub(r"https?://\S+", "", clean).strip(" :-")
+                matches_topic = not link_terms or any(term in clean.lower() for term in link_terms)
+                is_irrelevant = any(term in clean.lower() for term in irrelevant_terms)
+                is_category_noise = any(term in clean.lower() for term in category_noise.get(tool_name, ()))
+                if tool_name == "search_courses_programs" and clean.lower().startswith(("mr.", "mr ", "ms.", "ms ")):
+                    is_category_noise = True
+                minimum_length = 8 if tool_name == "search_courses_programs" else 40
+                if not clean.startswith("%PDF") and len(text_without_urls) >= minimum_length and matches_topic and not is_irrelevant and not is_category_noise:
+                    snippets.append(f"- {clean[:350]}")
+    if tool_name == "search_campus_location":
+        location_evidence = ("address", "located", "chennai", "tamil nadu", "chromepet", "campus location", "library")
+        snippets = [snippet for snippet in snippets if any(term in snippet.lower() for term in location_evidence)]
+    elif tool_name == "search_college_facilities":
+        facility_evidence = ("library", "laboratory", "lab", "hostel", "sports", "canteen", "health", "research facilities", "computing centre")
+        snippets = [
+            snippet for snippet in snippets
+            if any(term in snippet.lower() for term in facility_evidence)
+            and "academic calendar" not in snippet.lower()
+        ]
+    if not snippets:
+        for value in values:
+            relevant_links = []
+            for link in value.get("links") or []:
+                link_label = " ".join((link.get("text") or "").split())
+                if link_label and (not link_terms or any(term in link_label.lower() for term in link_terms)) and link_label not in relevant_links:
+                    relevant_links.append(f"- {link_label}: {link.get('url')}")
+            snippets.extend(relevant_links)
+    snippets = list(dict.fromkeys(snippets))
     if snippets:
         college = None
         if result.get("college_id"):
             source = _college_source(result["college_id"])
             college = source["short_name"] if source else None
-        subject = f"{college} {label}" if college else label
-        answer = f"Here is the official information I found about {subject}:\n" + "\n".join(snippets)
         if tool_name == "search_courses_programs":
-            shown = "\n".join(snippets)
-            extra_sources = [
-                f"- {source['title']}: {source['url']}"
-                for source in result.get("sources", [])
-                if source["url"] not in shown
-            ]
-            if extra_sources:
-                answer += "\n\nOfficial links are shown below."
+            heading = f"Courses offered at {college}" if college else "Courses offered"
+        else:
+            heading = f"Here is the official information I found about {college} {label}" if college else f"Here is the official information I found about {label}"
+        answer = heading + ":\n" + "\n".join(snippets)
         return answer
     return f"I found {len(values)} {label} record(s) in the available official campus sources."
 

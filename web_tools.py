@@ -39,11 +39,23 @@ QUERY_KEYWORDS = {
     "courses": ("course", "courses", "programme", "programmes", "program", "degree", "prospectus", "ug", "pg", "b.e", "b.tech", "m.e", "m.tech", "m.sc", "ph.d"),
     "admissions": ("admission", "admissions", "apply", "eligibility", "application", "fees", "counselling"),
     "facilities": ("facility", "facilities", "library", "hostel", "canteen", "laboratory", "lab", "sports", "auditorium", "gym"),
+    "locations": ("location", "located", "campus", "building", "landmark", "map"),
     "announcements": ("announcement", "announcements", "news", "notice", "notices", "circular", "events"),
     "academic": ("academic", "calendar", "regulation", "curriculum", "syllabus", "semester", "examination"),
     "contacts": ("contact", "phone", "email", "address", "office", "dean"),
     "general": ("college", "campus", "about", "overview"),
 }
+
+IRRELEVANT_CONTENT_TERMS = (
+    "alumni", "alumnus", "convocation", "chairman", "governor",
+    "biography", "born in", "schooling", "doctoral studies",
+    "commentator", "copyright", "syndicate",
+)
+COURSE_NOISE_TERMS = (
+    "programme", "programmes", "course", "courses", "academic",
+    "prospectus", "admission", "fee", "subject", "regulation",
+    "calendar", "centre", "department", "notification",
+)
 
 
 def _college_config(college):
@@ -91,13 +103,17 @@ def _page_text(page):
     return " ".join([page["title"], *page["headings"], *page["paragraphs"], *page["list_items"]])
 
 
-def _relevant_content(page, terms):
-    candidates = page["headings"] + page["list_items"]
+def _relevant_content(page, terms, complete=False):
+    candidates = page["headings"] + page["paragraphs"] + page["list_items"]
     matches = []
     for item in candidates:
         clean = " ".join(item.split())
         lowered = clean.lower()
-        if len(clean) > 180 or "administration administrators syndicate" in lowered:
+        if (
+            len(clean) > 320
+            or "administration administrators syndicate" in lowered
+            or any(term in lowered for term in IRRELEVANT_CONTENT_TERMS)
+        ):
             continue
         if clean and any(term in lowered for term in terms):
             if clean not in matches:
@@ -109,10 +125,41 @@ def _relevant_content(page, terms):
             item = f"{label}: {link['url']}"
             if item not in matches:
                 matches.append(item)
-    return " ".join(matches[:25])[:4500]
+    return " | ".join(matches if complete else matches[:25])[:12000 if complete else 4500]
 
 
-def search_official_website(college, query, limit=5):
+def _course_names(pages, college):
+    names = []
+    other_colleges = {
+        "CEG": ("madras institute", "alaguappa", "school of architecture", "mit campus", "act campus", "sap campus"),
+        "MIT": ("college of engineering guindy", "alaguappa", "school of architecture", "ceg campus", "act campus", "sap campus"),
+        "ACT": ("college of engineering guindy", "madras institute", "school of architecture", "ceg campus", "mit campus", "sap campus"),
+        "SAP": ("college of engineering guindy", "madras institute", "alaguappa", "ceg campus", "mit campus", "act campus"),
+    }.get(college, ())
+    for page in pages:
+        for item in page["headings"] + page["list_items"]:
+            clean = " ".join(item.split())
+            lowered = clean.lower()
+            if not clean or len(clean) > 120 or len(clean) < 5:
+                continue
+            if any(term in lowered for term in IRRELEVANT_CONTENT_TERMS + COURSE_NOISE_TERMS):
+                continue
+            if any(term in lowered for term in other_colleges):
+                continue
+            if any(term in lowered for term in ("board of", "computer society", "institute of", "campus", "established in", "outlook")):
+                continue
+            if not any(term in lowered for term in (
+                "engineering", "technology", "science", "architecture",
+                "planning", "design", "management", "computer", "chemical",
+                "textile", "leather", "automobile", "aeronautical",
+            )):
+                continue
+            if clean not in names:
+                names.append(clean)
+    return names
+
+
+def search_official_website(college, query, limit=5, complete=False):
     key, config = _college_config(college)
     terms = set(str(query).lower().split())
     for category, keywords in QUERY_KEYWORDS.items():
@@ -139,14 +186,27 @@ def search_official_website(college, query, limit=5):
             key=lambda link: sum(term in (link["text"] + " " + link["url"]).lower() for term in terms),
             reverse=True,
         )
-        for link in ranked_links[:12]:
+        link_budget = 60 if complete else 12
+        queue = [(link, 1) for link in ranked_links[:link_budget]]
+        processed = 0
+        while queue and processed < (100 if complete else link_budget):
+            link, depth = queue.pop(0)
             if link["url"] in visited or urlparse(link["url"]).netloc != urlparse(root).netloc:
                 continue
             if not any(term in (link["text"] + " " + link["url"]).lower() for term in terms):
                 continue
             try:
-                pages.append(scrape_page(link["url"]))
+                child = scrape_page(link["url"])
+                pages.append(child)
                 visited.add(link["url"])
+                processed += 1
+                if complete and depth < 2:
+                    child_links = sorted(
+                        child["links"],
+                        key=lambda item: sum(term in (item["text"] + " " + item["url"]).lower() for term in terms),
+                        reverse=True,
+                    )
+                    queue.extend((item, depth + 1) for item in child_links[:30])
             except requests.exceptions.RequestException as exc:
                 errors.append(f"{link['url']}: {exc}")
         if len(pages) > 1:
@@ -157,8 +217,9 @@ def search_official_website(college, query, limit=5):
         reverse=True,
     )
     results = []
-    for page in ranked_pages[:limit]:
-        text = _relevant_content(page, terms)
+    page_limit = len(ranked_pages) if complete else limit
+    for page in ranked_pages[:page_limit]:
+        text = _relevant_content(page, terms, complete=complete)
         if not text:
             continue
         results.append({
@@ -168,4 +229,10 @@ def search_official_website(college, query, limit=5):
             "content": text[:6000],
             "links": page["links"],
         })
-    return {"college": key, "query": query, "results": results, "errors": errors}
+    return {
+        "college": key,
+        "query": query,
+        "results": results,
+        "course_names": _course_names(pages, key) if "courses" in terms else [],
+        "errors": errors,
+    }

@@ -410,14 +410,14 @@ def _rows(table, college_id, where="", params=(), limit=20):
 
 
 def search_campus_location_for_college(college_id, name):
+        complete = _wants_complete(name)
         rows = _rows("campus_locations", college_id, "AND (location_name LIKE ? OR building_name LIKE ?)",
                      (f"%{name}%", f"%{name}%"))
         source = _college_source(college_id)
         if not rows and source:
-            rows = search_official_website(source["short_name"], name)["results"]
+            rows = search_official_website(source["short_name"], name, complete=complete)["results"]
         return {"college_id": college_id, "locations": rows,
-                "sources": [{"title": r.get("title") or "Official college source", "url": r.get("url") or r.get("source_url")}
-                            for r in rows if r.get("url") or r.get("source_url")]}
+                "sources": _official_sources(rows, source, "Official college source")}
 
 
 def get_student_timetable_for_college(college_id, department=None, section=None, semester=None, date=None, day=None):
@@ -444,15 +444,15 @@ def get_hostel_room_detail(college_id, hostel_name=None, room_type=None):
 
 
 def search_college_announcements(college_id, query=None, date_from=None, date_to=None, limit=10):
+        complete = _wants_complete(query)
         where, values = "", []
         if query: where += " AND (title LIKE ? OR content LIKE ?)"; values += [f"%{query}%", f"%{query}%"]
         rows = _rows("announcements", college_id, where, values, limit)
         source = _college_source(college_id)
         if not rows and source:
-            rows = search_official_website(source["short_name"], query or "announcements", limit)["results"]
+            rows = search_official_website(source["short_name"], query or "announcements", limit=None if complete else limit, complete=complete)["results"]
         return {"college_id": college_id, "announcements": rows,
-                "sources": [{"title": r.get("title") or "Official announcement source", "url": r.get("url") or r.get("source_url")}
-                            for r in rows if r.get("url") or r.get("source_url")]}
+                "sources": _official_sources(rows, source, "Official announcement source")}
 
 
 def search_college_events(college_id, query=None, date_from=None, date_to=None, event_type=None, limit=10):
@@ -538,6 +538,23 @@ def _college_source(college_id):
         return dict(row) if row else None
 
 
+def _official_sources(rows, source, title):
+        sources = [
+            {"title": row.get("title") or row.get("page_type") or title,
+             "url": row.get("url") or row.get("source_url")}
+            for row in rows
+            if row.get("url") or row.get("source_url")
+        ]
+        if not sources and source and source.get("website_url"):
+            sources.append({"title": f"{source['short_name']} official website", "url": source["website_url"]})
+        return sources
+
+
+def _wants_complete(query):
+        text = str(query or "").lower()
+        return any(term in text.split() for term in ("all", "complete", "entire", "every")) or "list all" in text or "show all" in text
+
+
 def _search_college_content(college_id, query, page_type=None, limit=20):
         clauses = ["college_id=?", "content LIKE ?"]
         values = [college_id, f"%{query}%"]
@@ -545,11 +562,14 @@ def _search_college_content(college_id, query, page_type=None, limit=20):
             clauses.append("page_type=?")
             values.append(page_type)
         conn = get_connection()
-        rows = conn.execute(
+        statement = (
             f"SELECT content, url AS source_url, page_type FROM scraped_pages "
-            f"WHERE {' AND '.join(clauses)} ORDER BY scraped_at DESC LIMIT ?",
-            (*values, limit),
-        ).fetchall()
+            f"WHERE {' AND '.join(clauses)} ORDER BY scraped_at DESC"
+        )
+        if limit is not None:
+            statement += " LIMIT ?"
+            values.append(limit)
+        rows = conn.execute(statement, values).fetchall()
         conn.close()
         return [dict(row) for row in rows]
 
@@ -558,7 +578,7 @@ def search_college_information(college_id, query="college"):
         source = _college_source(college_id)
         rows = _search_college_content(college_id, query)
         if not rows and source:
-            scraped = search_official_website(source["short_name"], query)
+            scraped = search_official_website(source["short_name"], query, complete=_wants_complete(query))
             rows = scraped["results"]
             scraped_sources = [{"title": row["title"], "url": row["url"]} for row in rows]
         else:
@@ -571,70 +591,85 @@ def search_college_information(college_id, query="college"):
 
 
 def search_departments(college_id, query="department"):
-        rows = _search_college_content(college_id, query, "departments")
+        complete = _wants_complete(query)
+        rows = _search_college_content(college_id, query, "departments", None if complete else 20)
         source = _college_source(college_id)
         if not rows and source:
-            rows = search_official_website(source["short_name"], "departments")["results"]
+            rows = search_official_website(source["short_name"], "departments", complete=complete)["results"]
         return {"college_id": college_id, "departments": rows,
-                "sources": [{"title": row.get("title") or row.get("page_type") or "Official department source", "url": row.get("url") or row.get("source_url")}
-                            for row in rows if row.get("url") or row.get("source_url")]}
+                "sources": _official_sources(rows, source, "Official department source")}
 
 
 def search_courses_programs(college_id, query="course"):
+        complete = _wants_complete(query)
         courses = search_course_in_college(college_id, query=query).get("courses", [])
         source = _college_source(college_id)
         scraped = []
+        course_names = []
         if not courses and source:
-            scraped = search_official_website(source["short_name"], query)["results"]
+            scraped_data = search_official_website(source["short_name"], query, complete=complete)
+            scraped = scraped_data["results"]
+            course_names = scraped_data.get("course_names", [])
+        config = SUPPORTED_COLLEGES.get(source["short_name"]) if source else None
         sources = []
         if source and source["website_url"]:
             sources.append({"title": f"{source['short_name']} official website", "url": source["website_url"]})
-        config = SUPPORTED_COLLEGES.get(source["short_name"]) if source else None
         if config and config.get("course_url"):
             sources.append({"title": f"{source['short_name']} official prospectus and fee structure", "url": config["course_url"]})
         sources.append({"title": "Anna University Centre for Academic Courses", "url": "https://cac.annauniv.edu/"})
         sources.extend({"title": row["title"], "url": row["url"]} for row in scraped)
-        return {"college_id": college_id, "courses": courses or scraped, "sources": sources}
+        unique_sources = []
+        seen_urls = set()
+        for item in sources:
+            if item["url"] and item["url"] not in seen_urls:
+                unique_sources.append(item)
+                seen_urls.add(item["url"])
+        return {
+            "college_id": college_id,
+            "courses": courses or scraped,
+            "course_names": course_names,
+            "sources": unique_sources,
+        }
 
 
 def search_admission_information(college_id, query="admission"):
-        rows = _search_college_content(college_id, query, "admissions")
+        complete = _wants_complete(query)
+        rows = _search_college_content(college_id, query, "admissions", None if complete else 20)
         source = _college_source(college_id)
         if not rows and source:
-            rows = search_official_website(source["short_name"], "admissions")["results"]
+            rows = search_official_website(source["short_name"], "admissions", complete=complete)["results"]
         return {"college_id": college_id, "admissions": rows,
-                "sources": [{"title": row.get("title") or row.get("page_type") or "Official admission source", "url": row.get("url") or row.get("source_url")}
-                            for row in rows if row.get("url") or row.get("source_url")]}
+                "sources": _official_sources(rows, source, "Official admission source")}
 
 
 def search_college_facilities(college_id, query="facility"):
-        rows = _search_college_content(college_id, query, "facilities")
+        complete = _wants_complete(query)
+        rows = _search_college_content(college_id, query, "facilities", None if complete else 20)
         source = _college_source(college_id)
         if not rows and source:
-            rows = search_official_website(source["short_name"], "facilities")["results"]
+            rows = search_official_website(source["short_name"], "facilities", complete=complete)["results"]
         return {"college_id": college_id, "facilities": rows,
-                "sources": [{"title": row.get("title") or row.get("page_type") or "Official facilities source", "url": row.get("url") or row.get("source_url")}
-                            for row in rows if row.get("url") or row.get("source_url")]}
+                "sources": _official_sources(rows, source, "Official facilities source")}
 
 
 def search_college_contacts(college_id, query="contact"):
-        rows = _search_college_content(college_id, query, "contacts")
+        complete = _wants_complete(query)
+        rows = _search_college_content(college_id, query, "contacts", None if complete else 20)
         source = _college_source(college_id)
         if not rows and source:
-            rows = search_official_website(source["short_name"], "contacts")["results"]
+            rows = search_official_website(source["short_name"], "contacts", complete=complete)["results"]
         return {"college_id": college_id, "contacts": rows,
-                "sources": [{"title": row.get("title") or row.get("page_type") or "Official contact source", "url": row.get("url") or row.get("source_url")}
-                            for row in rows if row.get("url") or row.get("source_url")]}
+                "sources": _official_sources(rows, source, "Official contact source")}
 
 
 def search_academic_information(college_id, query="academic"):
-        rows = _search_college_content(college_id, query, "academic")
+        complete = _wants_complete(query)
+        rows = _search_college_content(college_id, query, "academic", None if complete else 20)
         source = _college_source(college_id)
         if not rows and source:
-            rows = search_official_website(source["short_name"], "academic")["results"]
+            rows = search_official_website(source["short_name"], "academic", complete=complete)["results"]
         return {"college_id": college_id, "academic_information": rows,
-                "sources": [{"title": row.get("title") or row.get("page_type") or "Official academic source", "url": row.get("url") or row.get("source_url")}
-                            for row in rows if row.get("url") or row.get("source_url")]}
+                "sources": _official_sources(rows, source, "Official academic source")}
 
 
 PRIMARY_TOOL_NAMES = (
