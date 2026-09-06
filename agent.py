@@ -1,14 +1,12 @@
 import os
 import json
-<<<<<<< HEAD
+
 from pathlib import Path
-=======
->>>>>>> a4ba3ffd78a2334c89d1d74c49eb8148af132b8e
 
 from memory import add_message, get_memory
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import AuthenticationError, OpenAI
 
 from tools import (
     search_campus_location,
@@ -18,52 +16,50 @@ from tools import (
     get_booking_details,
     cancel_room_booking
 )
-<<<<<<< HEAD
+
 from tools import (
     PRIMARY_TOOL_NAMES, search_campus_location_for_college,
     get_student_timetable_for_college, check_hostel_availability,
     get_hostel_room_detail, search_college_announcements, search_college_events,
     search_course_in_college, get_academic_calendar, college_map
 )
-=======
->>>>>>> a4ba3ffd78a2334c89d1d74c49eb8148af132b8e
+
 
 
 # ==========================================
 # LOAD API KEY
 # ==========================================
 
-<<<<<<< HEAD
 ENV_FILE = Path(__file__).with_name(".env")
 
 
 def _api_key():
     load_dotenv(dotenv_path=ENV_FILE, override=False)
     return os.getenv("OPENROUTER_API_KEY", "").strip()
-=======
-load_dotenv()
 
-api_key = os.getenv("OPENROUTER_API_KEY")
 
-if not api_key:
-    print("API key not found!")
-    exit()
->>>>>>> a4ba3ffd78a2334c89d1d74c49eb8148af132b8e
-
+def _configured_api_key():
+    key = _api_key()
+    if not key:
+        return None
+    if not key.startswith("sk-or-"):
+        raise RuntimeError(
+            "OPENROUTER_API_KEY is invalid. Set it to a newly generated "
+            "OpenRouter API key in the local .env file."
+        )
+    return key
 
 # ==========================================
 # OPENROUTER
 # ==========================================
 
-<<<<<<< HEAD
+
 api_key = _api_key()
-client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key) if api_key else None
-=======
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=api_key
-)
->>>>>>> a4ba3ffd78a2334c89d1d74c49eb8148af132b8e
+) if api_key else None
+
 
 
 # ==========================================
@@ -383,6 +379,11 @@ def execute_tool(tool_name, arguments):
 # ==========================================
 
 def ask_agent(user_message):
+    if client is None:
+        raise RuntimeError(
+            "OPENROUTER_API_KEY is not configured. "
+            "Add it to the local .env file before using the AI agent."
+        )
 
     # Save user message
     add_message(
@@ -654,10 +655,7 @@ Never return "None" as an answer.
 
             })
 
-        # The while loop now continues.
-        # The AI receives the tool result
-<<<<<<< HEAD
-        # and generates the final answer.
+            # and generates the final answer.
 
 
 # Production web/API agent. Unlike the legacy CLI above, this graph has no
@@ -697,8 +695,11 @@ def _run_primary(name, args):
 
 def ask_agent_for_college(user_message, college_id, history=None):
     global client
-    api_key = _api_key()
-    if not api_key:
+    try:
+        api_key = _configured_api_key()
+    except RuntimeError as exc:
+        return {"answer": str(exc), "tool_used": None, "sources": []}
+    if api_key is None:
         return {"answer": "AI service is not configured. Please set OPENROUTER_API_KEY.", "tool_used": None, "sources": []}
     if client is None or client.api_key != api_key:
         client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
@@ -733,9 +734,18 @@ def ask_agent_for_college(user_message, college_id, history=None):
         return "tools" if state["messages"][-1].get("tool_calls") else END
     graph.add_node("agent", agent_node); graph.add_node("tools", tools_node)
     graph.add_edge(START, "agent"); graph.add_conditional_edges("agent", route, {"tools": "tools", END: END}); graph.add_edge("tools", "agent")
-    result = graph.compile().invoke({"messages": initial, "tool_used": None, "sources": []})
+    try:
+        result = graph.compile().invoke({"messages": initial, "tool_used": None, "sources": []})
+    except AuthenticationError:
+        return {
+            "answer": (
+                "OpenRouter authentication failed. Check OPENROUTER_API_KEY "
+                "in .env and replace it with a valid, active key."
+            ),
+            "tool_used": None,
+            "sources": [],
+        }
     answer = result["messages"][-1].get("content", "I could not generate a response.")
     return {"answer": answer, "tool_used": result.get("tool_used"), "sources": result.get("sources", [])}
-=======
+
         # and generates the final answer.
->>>>>>> a4ba3ffd78a2334c89d1d74c49eb8148af132b8e

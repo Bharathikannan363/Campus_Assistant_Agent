@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-"""SQLite persistence and schema for the campus assistant.
-
-The schema deliberately keeps college_id on every college-owned record so a
-future college can be added without changing the agent.
-"""
 import sqlite3
 from pathlib import Path
 
@@ -114,17 +108,9 @@ def create_database():
 
 
 create_database()
-=======
-import sqlite3
-
-DB_NAME = "campus.db"
 
 
-def get_connection():
-    return sqlite3.connect(DB_NAME)
-
-
-def create_database():
+def create_legacy_database():
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -171,6 +157,19 @@ def create_database():
         time TEXT,
         room TEXT
     )
+    """)
+    cursor.execute("""
+    DELETE FROM timetable
+    WHERE id NOT IN (
+        SELECT MIN(id)
+        FROM timetable
+        GROUP BY student_id, course, day, time, room
+    )
+    """)
+    cursor.execute("""
+    CREATE UNIQUE INDEX IF NOT EXISTS
+    timetable_entry_unique
+    ON timetable (student_id, course, day, time, room)
     """)
 
     # ==========================================
@@ -284,7 +283,7 @@ def create_database():
     ]
 
     cursor.executemany("""
-    INSERT INTO timetable
+    INSERT OR IGNORE INTO timetable
     (student_id, course, day, time, room)
     VALUES (?, ?, ?, ?, ?)
     """, timetable_data)
@@ -317,10 +316,9 @@ def create_database():
     print("Database initialized successfully!")
 
 
-# ==========================================
-# RUN DATABASE
-# ==========================================
+# Initialize legacy tables as well as the multi-college schema so both
+# existing tool surfaces work from a fresh checkout.
+create_legacy_database()
 
 if __name__ == "__main__":
     create_database()
->>>>>>> a4ba3ffd78a2334c89d1d74c49eb8148af132b8e

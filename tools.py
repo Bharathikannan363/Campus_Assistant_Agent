@@ -1,8 +1,7 @@
 from database import get_connection
-<<<<<<< HEAD
+
 import json
-=======
->>>>>>> a4ba3ffd78a2334c89d1d74c49eb8148af132b8e
+
 
 
 # ==========================================
@@ -329,10 +328,6 @@ def get_booking_details(booking_id):
             "success": False,
             "error": "Invalid booking ID."
         }
-<<<<<<< HEAD
-=======
-
->>>>>>> a4ba3ffd78a2334c89d1d74c49eb8148af132b8e
     cursor.execute("""
     SELECT
         id,
@@ -392,7 +387,7 @@ def cancel_room_booking(booking_id):
             "success": False,
             "error": "Invalid booking ID."
         }
-<<<<<<< HEAD
+
     cursor.execute("SELECT id FROM bookings WHERE id = ?", (booking_number,))
     if not cursor.fetchone():
         conn.close()
@@ -488,62 +483,3 @@ PRIMARY_TOOL_NAMES = (
         "get_hostel_room_detail", "search_college_announcements", "search_college_events",
         "search_course_in_college", "get_academic_calendar", "college_map",
 )
-=======
-
-    cursor.execute("""
-    SELECT id
-    FROM bookings
-    WHERE id = ?
-    """, (booking_number,))
-
-    booking = cursor.fetchone()
-
-    if not booking:
-
-        conn.close()
-
-        return {
-            "success": False,
-            "error": "Booking not found."
-        }
-
-    cursor.execute("""
-    DELETE FROM bookings
-    WHERE id = ?
-    """, (booking_number,))
-
-    conn.commit()
-    conn.close()
-
-    return {
-        "success": True,
-        "message":
-            f"Booking HALL-{booking_number:04d} "
-            "cancelled successfully."
-    }
-
-
-# ==========================================
-# TEST
-# ==========================================
-
-if __name__ == "__main__":
-
-    print("\n===== LOCATION TEST =====")
-
-    result = search_campus_location(
-        "Computer Networks"
-    )
-
-    print(result)
-
-
-    print("\n===== FULL TIMETABLE TEST =====")
-
-    result = get_student_timetable(
-        101,
-        "all"
-    )
-
-    print(result)
->>>>>>> a4ba3ffd78a2334c89d1d74c49eb8148af132b8e
