@@ -131,10 +131,10 @@ def _relevant_content(page, terms, complete=False):
 def _course_names(pages, college):
     names = []
     other_colleges = {
-        "CEG": ("madras institute", "alaguappa", "school of architecture", "mit campus", "act campus", "sap campus"),
-        "MIT": ("college of engineering guindy", "alaguappa", "school of architecture", "ceg campus", "act campus", "sap campus"),
+        "CEG": ("madras institute", "alaggapa", "alagappa", "school of architecture", "mit campus", "act campus", "sap campus"),
+        "MIT": ("college of engineering guindy", "alaggapa", "alagappa", "school of architecture", "ceg campus", "act campus", "sap campus"),
         "ACT": ("college of engineering guindy", "madras institute", "school of architecture", "ceg campus", "mit campus", "sap campus"),
-        "SAP": ("college of engineering guindy", "madras institute", "alaguappa", "ceg campus", "mit campus", "act campus"),
+        "SAP": ("college of engineering guindy", "madras institute", "alaggapa", "alagappa", "ceg campus", "mit campus", "act campus"),
     }.get(college, ())
     for page in pages:
         for item in page["headings"] + page["list_items"]:
@@ -146,7 +146,7 @@ def _course_names(pages, college):
                 continue
             if any(term in lowered for term in other_colleges):
                 continue
-            if any(term in lowered for term in ("board of", "computer society", "institute of", "campus", "established in", "outlook")):
+            if any(term in lowered for term in ("board of", "computer society", "institute of", "institute for", "campus", "established in", "outlook", "petronas")):
                 continue
             if not any(term in lowered for term in (
                 "engineering", "technology", "science", "architecture",
