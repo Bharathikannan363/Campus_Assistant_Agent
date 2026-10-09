@@ -1,11 +1,13 @@
+import os
 import sqlite3
 from pathlib import Path
 
-DB_NAME = str(Path(__file__).with_name("campus.db"))
+def get_db_path():
+    return os.getenv("DATABASE_PATH", str(Path(__file__).with_name("campus.db")))
 
 
 def get_connection():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -128,56 +130,23 @@ create_database()
 
 
 # ==========================================
-# WEB CACHE HELPERS
+# WEB CACHE HELPERS (NO-OP: Ephemeral memory only)
+# Scraped website content is NOT stored permanently in SQLite
 # ==========================================
 
 def cache_get(cache_key: str):
-    """Return cached JSON data if still within TTL, else None."""
-    db = get_connection()
-    row = db.execute(
-        "SELECT result_json, scraped_at, ttl_seconds FROM web_cache WHERE cache_key=?",
-        (cache_key,)
-    ).fetchone()
-    db.close()
-    if not row:
-        return None
-    try:
-        scraped_at = _dt.fromisoformat(row["scraped_at"].replace("Z", "+00:00"))
-        age = (_dt.now(_tz.utc) - scraped_at).total_seconds()
-        if age > row["ttl_seconds"]:
-            return None
-        return _json.loads(row["result_json"])
-    except Exception:
-        return None
+    """Scraped content is ephemeral and not stored in SQLite."""
+    return None
 
 
 def cache_set(cache_key: str, data, college_id=None, tool_name=None, ttl_seconds=3600):
-    """Store data in the web_cache table."""
-    db = get_connection()
-    try:
-        db.execute(
-            """INSERT INTO web_cache (cache_key, college_id, tool_name, result_json,
-               scraped_at, ttl_seconds)
-               VALUES (?, ?, ?, ?, ?, ?)
-               ON CONFLICT(cache_key) DO UPDATE SET
-                 result_json=excluded.result_json,
-                 scraped_at=excluded.scraped_at,
-                 ttl_seconds=excluded.ttl_seconds""",
-            (cache_key, college_id, tool_name,
-             _json.dumps(data, default=str),
-             _dt.now(_tz.utc).isoformat(), ttl_seconds)
-        )
-        db.commit()
-    finally:
-        db.close()
+    """Scraped content is not stored in SQLite."""
+    pass
 
 
 def cache_invalidate(cache_key: str):
-    """Delete a specific cache entry."""
-    db = get_connection()
-    db.execute("DELETE FROM web_cache WHERE cache_key=?", (cache_key,))
-    db.commit()
-    db.close()
+    """No-op for ephemeral web data."""
+    pass
 
 def create_legacy_database():
 
@@ -302,6 +271,22 @@ def create_legacy_database():
      'IT Block', 1, 'IT-101', 'Near Seminar Hall')
     """)
 
+    additional_locations = [
+        (3, 'Chemistry Lab', 'Science Block', 1, 'CH-101', 'Near Physics Lab'),
+        (4, 'Physics Lab', 'Science Block', 1, 'PH-102', 'Near Chemistry Lab'),
+        (5, 'Main Library', 'Central Library Building', 0, 'LIB-01', 'Opposite CS Block'),
+        (6, 'Central Workshop', 'Mechanical Block', 0, 'ME-105', 'Near Mechanical Lab'),
+        (7, 'Campus Canteen', 'Student Amenities Block', 0, 'CAN-01', 'Near Sports Complex'),
+        (8, 'Main Auditorium', 'Administrative Complex', 0, 'AUD-01', 'Near Main Gate'),
+        (9, 'Dean Office', 'Administrative Block', 1, 'AD-101', 'Main Entrance'),
+        (10, 'Campus Health Centre', 'Amenities Block', 0, 'HC-01', 'Near Hostel Zone'),
+    ]
+    cursor.executemany("""
+    INSERT OR IGNORE INTO locations
+    (id, name, building, floor, room, landmark)
+    VALUES (?, ?, ?, ?, ?, ?)
+    """, additional_locations)
+
     # ==========================================
     # FULL WEEK TIMETABLE
     # ==========================================
@@ -381,8 +366,6 @@ def create_legacy_database():
 
     conn.commit()
     conn.close()
-
-    print("Database initialized successfully!")
 
 
 # Initialize legacy tables as well as the multi-college schema so both
