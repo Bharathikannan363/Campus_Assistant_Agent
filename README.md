@@ -79,13 +79,7 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-### 3.3 Set your OpenRouter API Key in `.env`
-```env
-OPENROUTER_API_KEY=sk-or-v1-your_key_here
-OPENROUTER_MODEL=openai/gpt-4o-mini
-SEARCH_PROVIDER=duckduckgo
-CAMPUS_TIMEZONE=Asia/Kolkata
-```
+
 
 ---
 
